@@ -1,0 +1,77 @@
+version: '3.8'
+
+networks:
+  my_network:
+    driver: bridge
+
+volumes:
+  influxdb_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+services:
+  influxdb:
+    image: influxdb:2.7
+    container_name: influxdb
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=user
+      - DOCKER_INFLUXDB_INIT_PASSWORD=12345678
+      - DOCKER_INFLUXDB_INIT_ORG=perf
+      - DOCKER_INFLUXDB_INIT_BUCKET=telegraf
+      - DOCKER_INFLUXDB_INIT_RETENTION=1w
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=WfMPoz3nIWTwbb9G9ivfabOuhKK0kmpI8KPhHgMO9OCc-xsudte4FMsrBnnEj94JjcMHrKsxvTYPo3lRYuKPAg==
+    ports:
+      - "8086:8086"
+    volumes:
+      - influxdb_data:/var/lib/influxdb2
+    networks:
+      - my_network
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://influxdb:8086/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  telegraf:
+    image: telegraf:latest
+    container_name: telegraf
+    depends_on:
+      influxdb:
+        condition: service_healthy
+    environment:
+      - INFLUXDB_URL=http://influxdb:8086
+      - INFLUXDB_TOKEN=WfMPoz3nIWTwbb9G9ivfabOuhKK0kmpI8KPhHgMO9OCc-xsudte4FMsrBnnEj94JjcMHrKsxvTYPo3lRYuKPAg==
+      - INFLUXDB_ORG=perf
+      - INFLUXDB_BUCKET=telegraf
+      - HOST_ETC=C:/Windows/System32/drivers/etc
+      - HOST_PROC=/proc
+      - HOST_SYS=/sys
+      - HOST_VAR=/var
+      - HOST_RUN=/run
+    volumes:
+      - /:/rootfs:ro
+      - ./telegraf.conf:/etc/telegraf/telegraf.conf:ro
+    networks:
+      - my_network
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    depends_on:
+      influxdb:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - my_network
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://influxdb:3000/api/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
